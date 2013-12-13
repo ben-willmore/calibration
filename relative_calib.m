@@ -2,7 +2,7 @@ function calib = relative_calib(sampleRate, zBusNum, deviceName, golay_rms, chan
 %% record calibration curve
 % ==================================================
 
-n_reps = 2;
+n_reps = 10;
 
 cont=1;
 while cont==1

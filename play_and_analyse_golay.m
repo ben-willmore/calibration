@@ -86,7 +86,7 @@ end;
 % ===================================================
 
 padding = round(25/1000*samplerate);
-outbuf=[zeros(1, padding) ga zeros(1,trimtaps) zeros(1,delaytaps) gb zeros(1,trimtaps)];
+outbuf=[zeros(1, padding) ga zeros(1,trimtaps) zeros(1,delaytaps) gb zeros(1,trimtaps) zeros(1, padding)];
 
 if exist('firFlt') & ~isempty(firFlt)
   rms(outbuf)
@@ -137,7 +137,7 @@ if exist('highpass', 'var') && highpass~=0 && isfinite(highpass)
 else
     inbuf.chan1 = inbuf.chan1_unfiltered;
 end
-inbuf.chan1 = inbuf.chan1(padding+1:end);
+inbuf.chan1 = inbuf.chan1(padding+1:end-padding);
 
 
 %% analyse channel 1
@@ -149,7 +149,7 @@ sumb=inbuf.chan1(bstart+1:bstart+length(gb));
 
 irf.chan1=golanal(suma(:)',sumb(:)',ga(:)',gb(:)');
 irf.input_buffer = inbuf;
-irf.input_buffer.t_axis = taxis(1:end-padding);
+irf.input_buffer.t_axis = taxis(1:end-2*padding);
 
 irf.spectrum.f_axis = 0:(irf.ADrate/2)/(length(irf.chan1)/2-1):irf.ADrate/2;
 irf.spectrum.power  = 20*log10(abs(irf.chan1(1:length(irf.chan1)/2)));
