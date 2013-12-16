@@ -117,10 +117,13 @@ if exist('highpass', 'var') && highpass~=0 && isfinite(highpass)
 else
     inbuf.chan1 = inbuf.chan1_unfiltered;
 end
-inbuf.chan1 = inbuf.chan1(padding+length(compensationFilter)/2:end-padding-length(compensationFilter)/2);
 
-size(outbuf)
-size(inbuf.chan1)
+if ~isempty(compensationFilter)
+  inbuf.chan1 = inbuf.chan1(padding+length(compensationFilter)/2:end-padding-length(compensationFilter)/2);
+else
+  inbuf.chan1 = inbuf.chan1(padding+1:end-padding);
+end
+
 figure(9);
 subplot(2,2,1);
 plot(t, snd/rms_voltage_per_pascal);

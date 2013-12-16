@@ -3,6 +3,7 @@ function calib = relative_calib(sampleRate, zBusNum, deviceName, golay_rms, chan
 % ==================================================
 
 n_reps = 10;
+filtertype = 'minphase';
 
 cont=1;
 while cont==1
@@ -101,13 +102,12 @@ norm1(1)=0;
 % construct filter
 n=abs(jdecimate(jdecimate(norm1')))';
 
-filtertype = 'minphase';
 if strcmp(filtertype, 'jan')
     s=length(n)/2; % a slope s on the phases centers the fir filter
     calib.filter = real(ifft( n .* exp(j*[-s*pi:pi:(s-1)*pi])));   %#ok<*IJCL>
 elseif strcmp(filtertype, 'minphase')
     calib.filter = minPhase(n);
-    calib.filter = calib.filter(1:512);
+    calib.filter = calib.filter(1:512*round(samplerate/48828.125));
     calib.filter = calib.filter/norm(calib.filter); % length 1 -- no effect on amplitude
 else
     error('unknown filter type');

@@ -14,4 +14,5 @@
 * fix benware to use this latest version of compensation filters, 
   remove absolute level stuff and replace it with level adjustment if
   need be
+* does benware hash the actual files or just filenames? filenames is fragile
 
