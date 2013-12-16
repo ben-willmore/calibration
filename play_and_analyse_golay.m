@@ -1,4 +1,4 @@
-function irf=play_and_analyse_golay(samplerate, zbusnum, devicename, golaylen, trim, gap, rmsvalue, firFlt)
+function irf=play_and_analyse_golay(samplerate, zbusnum, devicename, golaylen, trim, gap, rmsvalue, firFlt, highpass)
 %   *** adapted from o4golayrec ***
 %
 % irf = o4golayrec(golaylen, trim, gap);
@@ -34,7 +34,7 @@ f = find(diff==min(diff), 1);
 if length(f)==1
   samplerate = sampleRates(f);
   sampleRateID = sampleRateIDs(f);
-  fprintf('Sample rate is %0.0f Hz\n',samplerate); 
+  %fprintf('Sample rate is %0.0f Hz\n',samplerate); 
 else
   error('Unknown sample rate');
 end
@@ -85,9 +85,14 @@ end;
 %% build signal to play from golay pair and delays
 % ===================================================
 
-outbuf=[ga zeros(1,trimtaps) zeros(1,delaytaps) gb zeros(1,trimtaps)];
+padding = round(25/1000*samplerate);
+outbuf=[zeros(1, padding) ga zeros(1,trimtaps) zeros(1,delaytaps) gb zeros(1,trimtaps) zeros(1, padding)];
+
 if exist('firFlt') & ~isempty(firFlt)
+  rms(outbuf)
   outbuf=conv(firFlt,outbuf);
+  rms(outbuf)
+  %keyboard
 end;
 
 timestep=1/irf.ADrate;
@@ -97,7 +102,7 @@ t_last=taxis(length(outbuf));
 %% record
 % ==========
 
-pause(0.5);
+pause(0.1);
 %inbuf=RX6_play(outbuf*.1)';
 
 % find out sample conversion rate
@@ -117,19 +122,34 @@ end;
 % trigger DA conversion
 invoke(RP,'SoftTrg',1);
 pause(sigDur/1000);
-inbuf.chan1=invoke(RP,'ReadTagVex','RecOut',0,length(outbuf),'F32','F64',1);
+inbuf.chan1_unfiltered=invoke(RP,'ReadTagVex','RecOut',0,length(outbuf),'F32','F64',1);
 %inbuf.chan2=invoke(RP,'ReadTagVex','RecOut2',0,length(outbuf),'F32','F64',1);
+
+if exist('highpass', 'var') && highpass~=0 && isfinite(highpass)
+   [N, Wn] = buttord(highpass/(samplerate/2), 0.6*highpass/(samplerate/2), 1, 20);
+   [B, A] = butter(N, Wn, 'high');
+   inbuf.chan1 = filtfilt(B, A, inbuf.chan1_unfiltered);
+   figure(9);
+   plot(inbuf.chan1);
+   hold all;
+   plot(inbuf.chan1_unfiltered);
+   hold off;
+else
+    inbuf.chan1 = inbuf.chan1_unfiltered;
+end
+inbuf.chan1 = inbuf.chan1(padding+1:end-padding);
+
 
 %% analyse channel 1
 % ====================
-
+%keyboard
 suma=inbuf.chan1(trimtaps+1:trimtaps+length(ga));
 bstart=length(ga)+2*trimtaps+delaytaps;
 sumb=inbuf.chan1(bstart+1:bstart+length(gb));
 
 irf.chan1=golanal(suma(:)',sumb(:)',ga(:)',gb(:)');
 irf.input_buffer = inbuf;
-irf.input_buffer.t_axis = taxis;
+irf.input_buffer.t_axis = taxis(1:end-2*padding);
 
 irf.spectrum.f_axis = 0:(irf.ADrate/2)/(length(irf.chan1)/2-1):irf.ADrate/2;
 irf.spectrum.power  = 20*log10(abs(irf.chan1(1:length(irf.chan1)/2)));

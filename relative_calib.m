@@ -1,24 +1,33 @@
-function calib = relative_calib(sampleRate, zBusNum, deviceName, golay_rms, channelID, cutoffs, dirname)
+function calib = relative_calib(sampleRate, zBusNum, deviceName, golay_rms, channelID, cutoffs, rms_volts_per_pascal, recording_highpass_f, dirname)
 %% record calibration curve
 % ==================================================
+
+n_reps = 10;
 
 cont=1;
 while cont==1
   
   % record silence
   fprintf('  - recording silence...');
-  calib.silence = cell(1,10);
-  for ii=1:10
-    calib.silence{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, 0, []);
+  calib.silence = cell(1,n_reps);
+  for ii=1:n_reps
+    calib.silence{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, 0, [], recording_highpass_f);
+      calib.silence{ii}.rms_peak = max(movingstd(calib.silence{ii}.input_buffer.chan1, round(sampleRate*.005)));
+      calib.silence{ii}.pressure_pa = calib.silence{ii}.rms_peak/rms_volts_per_pascal;
+      calib.silence{ii}.level = 94+20*log10(calib.silence{ii}.pressure_pa);
   end
+  
   calib.silence = [calib.silence{:}];
   fprintf(' [done]\n');
   
   % record impulse
   fprintf('  - recording impulse response...');
-  calib.irf = cell(1,10);
-  for ii=1:10
-    calib.irf{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, []);
+  calib.irf = cell(1,n_reps);
+  for ii=1:n_reps
+    calib.irf{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, [], recording_highpass_f);
+    calib.irf{ii}.rms_peak = max(movingstd(calib.irf{ii}.input_buffer.chan1, round(sampleRate*.005)));
+      calib.irf{ii}.pressure_pa = calib.irf{ii}.rms_peak/rms_volts_per_pascal;
+      calib.irf{ii}.level = 94+20*log10(calib.irf{ii}.pressure_pa);
   end
   calib.irf = [calib.irf{:}];
   fprintf(' [done]\n');
@@ -30,13 +39,14 @@ while cont==1
   hold all;
   p1 = plot_input_buffer(calib.silence);
   set(p1,'color',[1 0 0]);
-  title(sprintf('%s: silence','fontsize', channelID),14,'fontweight','bold');
+  title(sprintf('%s: silence; RMS=%0.2fPa, level=%0.2fdB', channelID, median([calib.silence.pressure_pa]), median([calib.silence.level])),'fontsize',14,'fontweight','bold');
   sp2 = subplot(2,2,2); hold all;
   p2 = plot_input_buffer(calib.irf);
   set(p2,'color',[0 0 1]);
-  title(sprintf('%s: impulse response', channelID), 'fontsize',14,'fontweight','bold');
-  yl = max(abs([get(sp1,'ylim') get(sp2,'ylim')]))*[-1 1];
-  set([sp1 sp2], 'ylim', yl);
+  title(sprintf('%s: impulse response; RMS=%0.2fPa, level=%0.2fdB', channelID, median([calib.irf.pressure_pa]), median([calib.irf.level])),'fontsize',14,'fontweight','bold');
+  yl1 = get(sp1, 'ylim');
+  yl2 = get(sp2, 'ylim');
+  set([sp1 sp2], 'ylim', [min(yl1(1), yl2(1)), max(yl1(2), yl2(2))]);
   sp3 = subplot(2,1,2); hold on;
   p3a = plot_spectrum(calib.silence);
   set(p3a(1:(end-2)),'color',[1 0 0]);
@@ -51,7 +61,6 @@ while cont==1
     cont=0;
   end
 end
-
 
 %% save figure
 % ===============
@@ -91,10 +100,18 @@ norm1(1)=0;
 
 % construct filter
 n=abs(jdecimate(jdecimate(norm1')))';
-s=length(n)/2; % a slope s on the phases centers the fir filter
-calib.filter = real(ifft( n .* exp(j*[-s*pi:pi:(s-1)*pi])));   %#ok<*IJCL>
-calib.filter = calib.filter/norm(calib.filter); % length 1 -- no effect on amplitude
-    
+
+filtertype = 'minphase';
+if strcmp(filtertype, 'jan')
+    s=length(n)/2; % a slope s on the phases centers the fir filter
+    calib.filter = real(ifft( n .* exp(j*[-s*pi:pi:(s-1)*pi])));   %#ok<*IJCL>
+elseif strcmp(filtertype, 'minphase')
+    calib.filter = minPhase(n);
+    calib.filter = calib.filter(1:512);
+    calib.filter = calib.filter/norm(calib.filter); % length 1 -- no effect on amplitude
+else
+    error('unknown filter type');
+end
    
 %% test calibration curve
 % ==========================
@@ -104,21 +121,25 @@ while cont==1
   
   % play calibrated sound
   fprintf('  - recording compensated impulse response...');
-  calib.irfc = cell(1,10);
-  for ii=1:10
-    calib.irfc{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, []);
+  calib.irfc = cell(1,n_reps);
+  for ii=1:n_reps
+    calib.irfc{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, calib.filter, recording_highpass_f);
+      calib.irfc{ii}.rms_peak = max(movingstd(calib.irfc{ii}.input_buffer.chan1, round(sampleRate*.005)));
+      calib.irfc{ii}.pressure_pa = calib.irfc{ii}.rms_peak/rms_volts_per_pascal;
+      calib.irfc{ii}.level = 94+20*log10(calib.irfc{ii}.pressure_pa);
   end
   calib.irfc = [calib.irfc{:}];
   fprintf(' [done]\n');
   
   % plot
-  figure(2); clf;
+  figure; clf;
   sp1 = subplot(2,1,1); hold all;
   p1 = plot_input_buffer(calib.irfc);
   set(p1,'color',[0 0 1]);
-  title(sprintf('%s: compensated impulse response', channelID),'fontsize',14,'fontweight','bold');
-  yl = max(get(sp1,'ylim'))*[-1 1];
-  %set(sp1, 'ylim', yl);
+  title(sprintf('%s: compensated impulse response; RMS=%0.2fPa, level=%0.2fdB', channelID, median([calib.irfc.pressure_pa]), median([calib.irfc.level])),'fontsize',14,'fontweight','bold');
+  yl1 = get(sp1, 'ylim');
+  yl2 = get(sp2, 'ylim');
+  set([sp1 sp2], 'ylim', [min(yl1(1), yl2(1)), max(yl1(2), yl2(2))]);
   sp2 = subplot(2,1,2); hold on;
   p2 = plot_spectrum(calib.irfc);
   set(p2(1:(end-2)),'color',[0 0 1]);

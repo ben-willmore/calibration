@@ -3,13 +3,18 @@ tdt50k = 48828.125;
 
 %% parameters that can be changed
 sampleRates = [tdt50k tdt50k*2];
+cutoffs{1} = [500 tdt50k/2];
+cutoffs{2} = [1000 32000];
+
 zBusNum = 1;
 deviceName = 'RX6';
 channelNames = {'Left-hand earphone (BLUE)'; 'Right-hand earphone (RED)'};
-golay_rms = 0.05;
+golay_rms = 0.05*10.^(-12/20);
+recording_highpass_f = 150; % Hz; filter out frequencies below this to deal with low-frequency noise
 
 %%
 addpath('./general');
+addpath('./jan');
 
 %%
 fprintf('\n\n\n');
@@ -31,7 +36,7 @@ if ~exist('calibs', 'var')
     end
 end
 
-%% 1. get the rms recorded voltage corresponding to 1Pa using the reference tone
+%% 1. get the level of the reference tone
 fprintf('== Reference tone: measuring mic response: \n');
 for samplerate_idx = 1:n_sampleRates
     calib = calibs{samplerate_idx};
@@ -39,71 +44,53 @@ for samplerate_idx = 1:n_sampleRates
     if isfield(calib, 'recorded_rms_volts_per_pascal')
         fprintf('already done, skipping\n');
     else
-        if exist('fakeData', 'var') && fakeData
-          fprintf('Using fake data\n');
-          f = load('fakeCalib.mat');
-          calib.refTone = f.fakeCalib.refTone;
-        else
-          fprintf('Plug in reference sound and press a key\n');
-          pause;
-          % record tone
-          calib.refTone.irf = play_and_analyse_golay(calib.sampleRate, zBusNum, deviceName, 11, 0, 5, 0, []);
-        end
+        happy = false;
+        while ~happy
+            if exist('fakeData', 'var') && fakeData
+              fprintf('Using fake data\n');
+              f = load('fakeCalib.mat');
+              calib.refTone = f.fakeCalib.refTone;
+            else
+              fprintf('Plug in reference sound and press a key...\n');
+              pause;
+              % record tone and calculate RMS
+              % (this plays silence)
+              calib.refTone.irf = play_and_analyse_golay(calib.sampleRate, zBusNum, deviceName, 11, 0, 5, 0, [], recording_highpass_f);
+            end
+
+            rec = calib.refTone.irf.input_buffer.chan1 - mean(calib.refTone.irf.input_buffer.chan1);
+            rec = rec(round(25/1000*calib.sampleRate):end-round(25/1000*calib.sampleRate)); % chop off ends which get messed up by filtering
+            t = ((1:length(rec))-1)/calib.sampleRate;
+            figure(1);
+            subplot(2,2,1);
+            plot(t,rec);
+            subplot(2,2,2);
+            n_plot = round(calib.sampleRate/100);
+            plot(t(1:300),rec(1:300));
+
+            subplot(2,2,[3 4]);
+            [Pxx, F] = pwelch(rec, [], [], [], calib.sampleRate);
+            diff = abs(F-1000);
+            f = find(diff<100);
+            dF = F(2)-F(1);
+            rms_volts = sqrt(trapz(Pxx(f))*dF);
+            %plot(F,Pxx)
+
+            loglog(F, sqrt(Pxx));
+            hold all
+            loglog(F(f), sqrt(Pxx(f)), 'ro-');
+            hold off;
         
-        % subtract mean
-        rec = calib.refTone.irf.input_buffer.chan1 - mean(calib.refTone.irf.input_buffer.chan1);
-
-        % tests
-        if false
-          % to test code, try a pure tone
-          t = (1:length(rec))*1/calib.sampleRate;
-          rec = sin(2*pi*1000*t);
-        elseif false
-          % try a filtered version of rec
-          [B,A] = butter(3,[900 1100]/(calib.sampleRate/2));
-          rec = filtfilt(B,A,rec);
+            s = '';
+            while ~strcmpi(s, 'y') && ~strcmpi(s, 'n')
+              s = input('  - happy [y/n]', 's');
+              if strcmpi(s, 'y')
+                  happy = true;
+              end
+            end
         end
+        calib.recorded_rms_volts_per_pascal = rms_volts;
 
-        refTone.total_variance = var(rec);
-
-        % plot
-        t = ((1:length(rec))-1)/calib.sampleRate;
-        figure(1);
-        subplot(2,2,1);
-        plot(t,rec);
-        
-        % plot zoomed in
-        subplot(2,2,2);
-        n_plot = round(calib.sampleRate/100);
-        plot(t(1:300),rec(1:300));
-
-        % plot PSD
-        subplot(2,2,[3 4]);
-        [refTone.powerspec, refTone.freqs] = pwelch(rec, [], [], [], calib.sampleRate);
-  
-        % find region of power spectrum from 900:1100Hz to allow (amply) for discreteness of FFT
-        d = abs(refTone.freqs-1000);
-        f = find(d<100);
-        d_freq = refTone.freqs(2)-refTone.freqs(1);
-
-        % integrate over spectrum, multiplied by delta_frequency
-        refTone.total_power = trapz(refTone.powerspec)*d_freq;
-        % total_power should be equal to var(rec), but it isn't quite (2% difference for current data)
-        %assert(abs(total_variance-var(rec))<eps(total_variance)); % doesn't quite work
-        refTone.tone_power = trapz(refTone.powerspec(min(f):max(f)))*d_freq; % variance 
-        refTone.tone_percent_power = refTone.tone_power/refTone.total_power*100;
-        refTone.tone_rms = sqrt(refTone.tone_power);
-        loglog(refTone.freqs, sqrt(refTone.powerspec))
-        hold all
-        loglog(refTone.freqs(f), sqrt(refTone.powerspec(f)), 'ro-');
-        hold off;
-        title(sprintf('Overall variance = %0.2e; total power = %0.2e; tone power = %0.2e (%0.1f%%); tone RMS = %0.2e', ...
-            refTone.total_variance, refTone.total_power, refTone.tone_power, refTone.tone_percent_power, refTone.tone_rms))
-  
-        refTone.level = 94; % assuming reference tone is 94dB
-        refTone.pressure_pascals = 10.^((refTone.level-94)/20); % 94dB is 1 Pascal
-        refTone.rms_volts_recorded_per_pascal = refTone.tone_rms/refTone.pressure_pascals;
-        calib.refTone = refTone;
         calibs{samplerate_idx} = calib;
         fprintf('-> Done\n');
     end
@@ -113,23 +100,60 @@ end
 fprintf('\n== Relative calibration: measuring frequency response:\n');
 for channel = 1:n_channels
     channelName = channelNames{channel};
-    fprintf('Plug in %s...\n', channelName);
-    pause;
-    
+    fprintf('%s:\n', channelName);
+    plugged_in = false;
+
     for samplerate_idx = 1:n_sampleRates
         calib = calibs{samplerate_idx};
-        calib.relCalib = {};
-        calib.relCalib{channel} = struct;
+                    
         fprintf('= %0.0fHz: ', calib.sampleRate);
-        if isfield(calib, 'compensationFilters')
-            fprintf('already done, skipping\n');
-        else
-            relCalibs = {};
-            calib = relative_calib(calib.sampleRate, zBusNum, deviceName, golay_rms, channelName(1), cutoffs, dirname);
-            fprintf('-> Done');
+
+        if ~isfield(calib, 'relCalibs')
+            calib.relCalibs = {};
         end
+        
+        if length(calib.relCalibs)>=channel
+            fprintf('already done, skipping\n');
+            continue;
+        end
+        if ~plugged_in
+            fprintf('Plug in %s and press a key...\n', channelName);
+            pause;
+            plugged_in = true;
+        end
+        calib.relCalibs{channel} = relative_calib(calib.sampleRate, zBusNum, deviceName, golay_rms, channelName(1), ...
+            cutoffs{samplerate_idx}, calibs{samplerate_idx}.recorded_rms_volts_per_pascal, recording_highpass_f, dirname);
+        calib.relCalibs{channel}.channelIdx = channel;
+        calib.relCalibs{channel}.channelName = channelName;
+        calibs{samplerate_idx} = calib;
+        fprintf('-> Done');
     end
 end
 
+%% 3. save
+save(sprintf('%s/calibration.mat', dirname), 'calibs');
 
+full_calibs = calibs;
+calibs = {};
+for samplerate_idx = 1:length(full_calibs)
+    full_calib = full_calibs{samplerate_idx};
+    calib = struct;
+    calib.sampleRate = full_calib.sampleRate;
+    calib.recorded_rms_volts_per_pascal = full_calib.recorded_rms_volts_per_pascal;
+    
+    relCalibs = {};
+    for channel_idx = 1:length(full_calib.relCalibs)
+        full_relcalib = full_calib.relCalibs{channel_idx};
+        relCalib = struct;
+        relCalib.channelIdx = full_relcalib.channelIdx;
+        relCalib.channelName = full_relcalib.channelName;
+        relCalib.ADrate = full_relcalib.ADrate;
+        relCalib.filter = full_relcalib.filter;
+        relCalibs{channel_idx} = relCalib;
+    end
+    calib.relCalibs = [relCalibs{:}];
+    calibs{samplerate_idx} = calib;
+end
+calibs = [calibs{:}];
 
+save(sprintf('%s/compensation_filters.mat', dirname), 'calibs');

@@ -1,0 +1,17 @@
+== TODO
+
+* which way round should the conv be? the filter? IT MATTERS FOR MINPHASE!
+* are we losing low frequencies?? testcalib fmsweep suggests so
+* record frequency cutoffs with calibration
+* save figures correctly
+* check whether something weird is going on with the absolute level --
+  an RMS of x should produce a level of y dB, but it doesn't -- 
+  compensated and uncompensated golays are different by 10dB ish
+* make a sound testing program -- adjust golay player to play arbitrary 
+  sound, plot expected and recorded sounds, as well as time-varying
+  level in dB (using comp filters to do correction).
+  do FM sweep, pure tones, band-limited noise
+* fix benware to use this latest version of compensation filters, 
+  remove absolute level stuff and replace it with level adjustment if
+  need be
+
