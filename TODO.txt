@@ -1,9 +1,28 @@
 == TODO
 
+Not done (calibration):
+* save figures correctly
+* record frequency cutoffs with calibration
+
+Not done (benware):
+* fix benware to use this latest version of compensation filters, 
+  remove absolute level stuff and replace it with level adjustment if
+  need be
+  -- for makeCalibTone
+         loadStimAndCompensate
+         astrid's stuff
+         makeCSDprobe
+         makeBilateralNoise
+* update grids (straightforward) -- inc legacyStimLevelOffsetdB
+* make benware read in the output of the mic when in a special mode
+  -- plot the level of the recorded stimulus
+* does benware hash the actual files or just filenames? filenames is fragile
+  -- drop caching -- doesn't seem necessary (really?!)
+
+
+Probably done (check!):
 * which way round should the conv be? the filter? IT MATTERS FOR MINPHASE!
 * are we losing low frequencies?? testcalib fmsweep suggests so
-* record frequency cutoffs with calibration
-* save figures correctly
 * check whether something weird is going on with the absolute level --
   an RMS of x should produce a level of y dB, but it doesn't -- 
   compensated and uncompensated golays are different by 10dB ish
@@ -11,7 +30,3 @@
   sound, plot expected and recorded sounds, as well as time-varying
   level in dB (using comp filters to do correction).
   do FM sweep, pure tones, band-limited noise
-* fix benware to use this latest version of compensation filters, 
-  remove absolute level stuff and replace it with level adjustment if
-  need be
-

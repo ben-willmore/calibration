@@ -2,21 +2,21 @@
 tdt50k = 48828.125;
 
 %% parameters that can be changed
-sampleRates = [tdt50k tdt50k*2];
-cutoffs{1} = [500 tdt50k/2];
-cutoffs{2} = [1000 32000];
+sampleRates = [tdt50k tdt50k*2]; % sample rates at which to calibrate
+cutoffs{1} = [500 tdt50k/2]; % low and high freq cutoffs for sampleRates(1)
+cutoffs{2} = [1000 32000]; % low and high freq cutoffs for sampleRates(2)
 
-zBusNum = 1;
-deviceName = 'RX6';
-channelNames = {'Left-hand earphone (BLUE)'; 'Right-hand earphone (RED)'};
-golay_rms = 0.05*10.^(-12/20);
+zBusNum = 1; % zBus number (usually 1)
+deviceName = 'RX6'; % device to use (there must be a corresponding .rcx file)
+channelNames = {'Left-hand earphone (BLUE)'; 'Right-hand earphone (RED)'}; % you must have one name per channel
+golay_rms = 0.05*10.^(-12/20); % RMS voltage to play golay codes at -- adjust to a reasonable level
 recording_highpass_f = 150; % Hz; filter out frequencies below this to deal with low-frequency noise
 
-%%
+%% don't change below this
 addpath('./general');
 addpath('./jan');
 
-%%
+%% initial setup
 fprintf('\n\n\n');
 fprintf('======================================\n');
 subdir = input('Subdirectory to save in: \n   ','s');
@@ -24,7 +24,7 @@ dirname = fixpath(['./' subdir]);
 fprintf('======================================\n\n');
 mkdir_nowarning(dirname);
 
-%% don't change below this
+
 n_sampleRates = length(sampleRates);
 n_channels = length(channelNames);
 
@@ -133,6 +133,8 @@ end
 %% 3. save
 save(sprintf('%s/calibration.mat', dirname), 'calibs');
 
+
+%% 4. save minimal information (inc filters) in a second file
 full_calibs = calibs;
 calibs = {};
 for samplerate_idx = 1:length(full_calibs)
