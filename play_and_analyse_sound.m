@@ -1,4 +1,4 @@
-function irf=play_and_analyse_sound(samplerate, zbusnum, devicename, snd, rms_voltage_per_pascal, compensationFilter, highpass)
+function irf=play_and_analyse_sound(samplerate, zbusnum, devicename, snd, compensationFilter, highpass)
 %   *** adapted from o4golayrec ***
 %
 % irf = o4golayrec(golaylen, trim, gap);
@@ -67,7 +67,6 @@ end
 
 padding = round(25/1000*samplerate);
 outbuf=[zeros(1, padding) snd zeros(1, padding)];
-outbuf = outbuf * rms_voltage_per_pascal;
 
 if exist('compensationFilter') && ~isempty(compensationFilter)
   outbuf=conv(compensationFilter, outbuf);
@@ -126,17 +125,17 @@ end
 
 figure(9);
 subplot(2,2,1);
-plot(t, snd/rms_voltage_per_pascal);
+plot(t, snd);
 subplot(2,2,3);
 plot(t, inbuf.chan1);
 subplot(2,2,2);
 plot(t, 94+20*log10(movingstd(snd, round(10/1000*samplerate))));
 subplot(2,2,2);
 hold all;
-plot(t, 94+20*log10(movingstd(inbuf.chan1, round(10/1000*samplerate))/rms_voltage_per_pascal));
+plot(t, 94+20*log10(movingstd(inbuf.chan1, round(10/1000*samplerate))));
 hold off;
 
-
+irf.input_buffer = inbuf;
 
 %% analyse channel 1
 % ====================

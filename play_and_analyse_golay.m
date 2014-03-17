@@ -89,9 +89,9 @@ padding = round(25/1000*samplerate);
 outbuf=[zeros(1, padding) ga zeros(1,trimtaps) zeros(1,delaytaps) gb zeros(1,trimtaps) zeros(1, padding)];
 
 if exist('firFlt') & ~isempty(firFlt)
-  rms(outbuf)
+  %rms(outbuf)
   outbuf=conv(firFlt,outbuf);
-  rms(outbuf)
+  %rms(outbuf)
   %keyboard
 end;
 

@@ -107,12 +107,14 @@ if strcmp(filtertype, 'jan')
     calib.filter = real(ifft( n .* exp(j*[-s*pi:pi:(s-1)*pi])));   %#ok<*IJCL>
 elseif strcmp(filtertype, 'minphase')
     calib.filter = minPhase(n);
-    calib.filter = calib.filter(1:512*round(samplerate/48828.125));
-    calib.filter = calib.filter/norm(calib.filter); % length 1 -- no effect on amplitude
+    calib.filter = calib.filter(1:512*round(sampleRate/48828.125));
 else
     error('unknown filter type');
 end
-   
+
+calib.filter = calib.filter/norm(calib.filter); % length 1 -- no effect on amplitude
+calib.filterType = filtertype;
+
 %% test calibration curve
 % ==========================
 
@@ -123,7 +125,7 @@ while cont==1
   fprintf('  - recording compensated impulse response...');
   calib.irfc = cell(1,n_reps);
   for ii=1:n_reps
-    calib.irfc{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, calib.filter, recording_highpass_f);
+      calib.irfc{ii} = play_and_analyse_golay(sampleRate, zBusNum, deviceName, 11, 0, 5, golay_rms, calib.filter, recording_highpass_f);
       calib.irfc{ii}.rms_peak = max(movingstd(calib.irfc{ii}.input_buffer.chan1, round(sampleRate*.005)));
       calib.irfc{ii}.pressure_pa = calib.irfc{ii}.rms_peak/rms_volts_per_pascal;
       calib.irfc{ii}.level = 94+20*log10(calib.irfc{ii}.pressure_pa);
@@ -136,7 +138,8 @@ while cont==1
   sp1 = subplot(2,1,1); hold all;
   p1 = plot_input_buffer(calib.irfc);
   set(p1,'color',[0 0 1]);
-  title(sprintf('%s: compensated impulse response; RMS=%0.2fPa, level=%0.2fdB', channelID, median([calib.irfc.pressure_pa]), median([calib.irfc.level])),'fontsize',14,'fontweight','bold');
+  title(sprintf('%s: compensated; RMS=%0.2fPa, level=%0.2fdB', channelID, median([calib.irfc.pressure_pa]), median([calib.irfc.level])),'fontsize',14,'fontweight','bold');
+
   yl1 = get(sp1, 'ylim');
   yl2 = get(sp2, 'ylim');
   set([sp1 sp2], 'ylim', [min(yl1(1), yl2(1)), max(yl1(2), yl2(2))]);
