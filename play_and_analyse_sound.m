@@ -1,4 +1,4 @@
-function irf=play_and_analyse_sound(samplerate, zbusnum, devicename, snd, compensationFilter, highpass)
+function irf=play_and_analyse_sound(samplerate, zbusnum, devicename, snd, compensationFilter, highpass, rms_volts_per_pascal)
 %   *** adapted from o4golayrec ***
 %
 % irf = o4golayrec(golaylen, trim, gap);
@@ -10,6 +10,9 @@ function irf=play_and_analyse_sound(samplerate, zbusnum, devicename, snd, compen
 
 %% prepare
 % =========
+
+fprintf('Warning: ignoring high pass filter\n');
+clear highpass; % don't use high pass filter
 
 %% parse sample rate
 tdt50k = 48828.125;
@@ -123,18 +126,18 @@ else
   inbuf.chan1 = inbuf.chan1(padding+1:end-padding);
 end
 
-figure(9);
 subplot(2,2,1);
 plot(t, snd);
+title('Output');
 subplot(2,2,3);
-plot(t, inbuf.chan1);
+plot(t, inbuf.chan1/rms_volts_per_pascal);
+title('Recording');
 subplot(2,2,2);
 plot(t, 94+20*log10(movingstd(snd, round(10/1000*samplerate))));
-subplot(2,2,2);
 hold all;
-plot(t, 94+20*log10(movingstd(inbuf.chan1, round(10/1000*samplerate))));
+plot(t, 94+20*log10(movingstd(inbuf.chan1/rms_volts_per_pascal, round(10/1000*samplerate))));
 hold off;
-
+legend({'Output';'Recording'});
 irf.input_buffer = inbuf;
 
 %% analyse channel 1

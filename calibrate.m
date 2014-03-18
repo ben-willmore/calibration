@@ -3,13 +3,13 @@ tdt50k = 48828.125;
 
 %% parameters that can be changed
 sampleRates = [tdt50k tdt50k*2]; % sample rates at which to calibrate
-cutoffs{1} = [250 tdt50k/2]; % low and high freq cutoffs for sampleRates(1)
-cutoffs{2} = [500 32000]; % low and high freq cutoffs for sampleRates(2)
+cutoffs{1} = [200 tdt50k/2]; % low and high freq cutoffs for sampleRates(1)
+cutoffs{2} = [200 32000]; % low and high freq cutoffs for sampleRates(2)
 
 zBusNum = 1; % zBus number (usually 1)
 deviceName = 'RX6'; % device to use (there must be a corresponding .rcx file)
 channelNames = {'Left-hand earphone (BLUE)'; 'Right-hand earphone (RED)'}; % you must have one name per channel
-golay_rms = 0.05*10.^(-12/20); % RMS voltage to play golay codes at -- adjust to a reasonable level
+golay_rms = 0.05*10.^(-12/20)*10; % RMS voltage to play golay codes at -- adjust to a reasonable level
 recording_highpass_f = 150; % Hz; filter out frequencies below this to deal with low-frequency noise
 
 %% don't change below this
@@ -32,6 +32,7 @@ if ~exist('calibs', 'var')
     calib = struct;
     for samplerate_idx = 1:n_sampleRates
         calib.sampleRate = sampleRates(samplerate_idx);
+        calib.cutoffs = cutoffs{samplerate_idx};
         calibs{samplerate_idx} = calib;
     end
 end
@@ -41,7 +42,7 @@ fprintf('== Reference tone: measuring mic response: \n');
 for samplerate_idx = 1:n_sampleRates
     calib = calibs{samplerate_idx};
     fprintf('= %0.0fHz: ', calib.sampleRate);
-    if isfield(calib, 'recorded_rms_volts_per_pascal')
+    if isfield(calib, 'refTone')
         fprintf('already done, skipping\n');
     else
         happy = false;
@@ -102,7 +103,7 @@ for channel = 1:n_channels
         end
         fprintf('= %0.0fHz: ', calib.sampleRate);
         calib.channel{channel} = relative_calib(calib.sampleRate, zBusNum, deviceName, golay_rms, channelName(1), ...
-            cutoffs{samplerate_idx}, calibs{samplerate_idx}.recorded_rms_volts_per_pascal, recording_highpass_f, dirname);
+            cutoffs{samplerate_idx}, calibs{samplerate_idx}.refTone.recorded_rms_volts_per_pascal, recording_highpass_f, dirname);
         calib.channel{channel}.channelIdx = channel;
         calib.channel{channel}.channelName = channelName;
         % now play 1000Hz compensated, record RMS etc.
@@ -112,7 +113,7 @@ for channel = 1:n_channels
         snd = snd/rms(snd); % 1Pa RMS = 94dB
         
         fudgeGain = 30;
-        calib.channel{channel}.absCalib.irf = play_and_analyse_sound(calib.sampleRate, zBusNum, deviceName, snd, calib.channel{channel}.filter/fudgeGain, recording_highpass_f);
+        calib.channel{channel}.absCalib.irf = play_and_analyse_sound(calib.sampleRate, zBusNum, deviceName, snd, calib.channel{channel}.filter/fudgeGain, recording_highpass_f, calib.refTone.recorded_rms_volts_per_pascal);
         recorded_rms_volts_per_pascal = getToneRMS(calib.sampleRate, calib.channel{channel}.absCalib.irf.input_buffer.chan1, 1000);
         filter_correction_factor = calib.refTone.recorded_rms_volts_per_pascal/fudgeGain/recorded_rms_volts_per_pascal;
         calib.channel{channel}.filter = calib.channel{channel}.filter * filter_correction_factor;
@@ -142,8 +143,8 @@ for samplerate_idx = 1:length(full_calibs)
     full_calib = full_calibs{samplerate_idx};
     calib = struct;
     calib.sampleRate = full_calib.sampleRate;
-    calib.recorded_rms_volts_per_pascal = full_calib.recorded_rms_volts_per_pascal;
-    
+    calib.reftone_rms_volts_per_pascal = full_calib.refTone.recorded_rms_volts_per_pascal;
+    calib.cutoffs = full_calib.cutoffs;
     channels = {};
     for channel_idx = 1:length(full_calib.channel)
         full_channel = full_calib.channel{channel_idx};

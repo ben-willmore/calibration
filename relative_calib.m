@@ -1,9 +1,10 @@
+
 function calib = relative_calib(sampleRate, zBusNum, deviceName, golay_rms, channelID, cutoffs, rms_volts_per_pascal, recording_highpass_f, dirname)
 %% record calibration curve
 % ==================================================
 
 n_reps = 10;
-filtertype = 'minphase';
+filtertype = 'zerophase';
 
 cont=1;
 while cont==1
@@ -89,12 +90,15 @@ norm1 = ones(1,len.L) ./ calib.mean_intensity;
 % flatten above cutoffs(2)
 fromBin = round(len.L*cutoffs(2)/calib.ADrate);
 segLen = len.L/2 - fromBin;
-norm1(fromBin+1:fromBin+2*segLen) = ones(1,2*segLen);
+norm1(fromBin+1:fromBin+2*segLen) = nan;
 
 % flatten below cutoffs(1)
 fromBinLowFreqs=round(len.L*cutoffs(1)/calib.ADrate);
-norm1(1:fromBinLowFreqs) = ones(1,fromBinLowFreqs) *10^(0/20);
-norm1((end-fromBinLowFreqs+2):end) = ones(1,fromBinLowFreqs-1) *10^(0/20);
+norm1(1:fromBinLowFreqs) = nan;
+norm1((end-fromBinLowFreqs+2):end) = nan;
+
+mn = nanmean(norm1);
+norm1(isnan(norm1)) = mn/4;
 
 % zero DC term
 norm1(1)=0;
@@ -105,6 +109,11 @@ n=abs(jdecimate(jdecimate(norm1')))';
 if strcmp(filtertype, 'jan')
     s=length(n)/2; % a slope s on the phases centers the fir filter
     calib.filter = real(ifft( n .* exp(j*[-s*pi:pi:(s-1)*pi])));   %#ok<*IJCL>
+elseif strcmp(filtertype, 'zerophase')
+    calib.filter = fftshift(real(ifft(n))); % identical to above
+    newsize = 256*sampleRate/48828.125;
+    ctr = length(calib.filter)/2+1;
+    calib.filter = calib.filter(ctr-newsize/2:ctr+newsize/2-1);
 elseif strcmp(filtertype, 'minphase')
     calib.filter = minPhase(n);
     calib.filter = calib.filter(1:512*round(sampleRate/48828.125));
